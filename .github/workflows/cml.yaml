@@ -35,7 +35,7 @@ jobs:
 
       # 5. Guardar el modelo entrenado como artefacto
       - name: Upload trained model
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: random_forest_model
           path: random_forest_model.pkl
