@@ -1,4 +1,4 @@
-name: Train Random Forest Model
+name: CI for ML Project
 
 on:
   push:
