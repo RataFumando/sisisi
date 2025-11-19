@@ -1,97 +1,87 @@
-#librerias 
-
-import pandas as pd 
+import pandas as pd
 import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.metrics import mean_absolute_error, r2_score
 import matplotlib.pyplot as plt
-import seaborn as sns
-import datetime as dt
-import scipy.stats
-import statsmodels.formula.api as sm
-from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler
-from mpl_toolkits.mplot3d import Axes3D 
+import joblib
 
-#datasets 
-#dataset1=csv_egresos.csv= data1.csv 
-cat_dataset = pd.read_csv('data1.csv', sep =';', encoding='latin1')
-#dataset2=Delitos_CSV.csv = data2.csv 
-cat_MINPUB = pd.read_csv('data2.csv', sep =';', encoding='latin1')
-df_del =pd.read_csv('data2.csv', sep =';')
-#dataset3=Egresos_gendarmeria.csv= data3.csv
-df_egr = pd.read_csv('data3.csv', sep =';', encoding='latin1')
-df_fin = pd.merge(df_del, df_egr, on ='COD_DELITO')
+# === 1. Cargar datos ===
+df = pd.read_csv("data.csv")
 
+# Eliminar filas con valores faltantes
+df.dropna(inplace=True)
 
-df_fin.columns
-df_fin.info()
-df_fin2 = df_fin
-df_final = df_fin2.drop_duplicates()
+# === 2. Separar características y etiqueta ===
+X = df.drop(["maxtemp"], axis=1)  # Predecimos maxtemp
+y = df["maxtemp"]
 
-df_final["COD_PERS"].value_counts()
-df_final.groupby(['MES_EGRESO', 'COD_PERS','Codigo', 'COD_DELITO'])['SCORE'].sum()
-df_fin2.isnull().sum()
-df_fin2.nunique()
-df_fin2['COD_DELITO'].unique()
-df_fin2['MES_EGRESO'].unique()
+# Columnas categóricas
+categorical_columns = ["weather", "cloud", "Date"]
 
-df_fin2['MES_EGRESO'].value_counts()
-df_fin2['MES_EGRESO'] = df_fin2['MES_EGRESO'].astype(str)
-df_fin2.groupby(['MES_EGRESO'])['SCORE'].sum()
+# Asegurar que la fecha se maneje como categoría sin procesar
+X["Date"] = X["Date"].astype(str)
 
-score = df_fin2.groupby(['MES_EGRESO','COD_PERS']).agg({'SCORE': lambda x: x.sum()})
-score.reset_index(inplace=True)
+# === 3. Preprocesamiento ===
+preprocessor = ColumnTransformer(
+    transformers=[
+        ("cat", OneHotEncoder(handle_unknown="ignore"), categorical_columns)
+    ],
+    remainder="passthrough"
+)
 
-col =['COD_PERS', 'MES_EGRESO', 'SCORE', 'COD_DELITO','Codigo']
-rfm = df_fin2[col]
+# === 4. Modelo Random Forest ===
+model = RandomForestRegressor(
+    n_estimators=200,
+    random_state=42
+)
 
-rfm['MES_EGRESO'] = pd.to_datetime(rfm['MES_EGRESO'],errors ='coerce')
-rfm['MES_EGRESO'].max()
-f_corte = dt.datetime(2022,7,1)
-rfm = rfm.drop_duplicates()
-RFM1 = rfm.groupby('COD_PERS').agg({'MES_EGRESO': lambda x: (f_corte - x.max()).days})
-RFM1['Frecuencia'] = (rfm.groupby(by=['COD_PERS'])['Codigo'].count()).astype(float)
-RFM1['ScoreTotal'] = rfm.groupby(by=['COD_PERS']).agg({'SCORE': 'sum'})
+# Pipeline completo
+pipeline = Pipeline(steps=[
+    ("preprocessor", preprocessor),
+    ("model", model)
+])
 
-RFM1.rename(columns={'MES_EGRESO': 'Egreso más reciente'}, inplace=True)
+# === 5. Entrenar modelo ===
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
 
-RFM1[RFM1['Egreso más reciente'] == 0]
-RFM1[RFM1['Frecuencia'] == 0]
-RFM1[RFM1['ScoreTotal'] == 0]
-RFM1 = RFM1[RFM1['Egreso más reciente'] > 0]
-RFM1.reset_index(drop=True,inplace=True)
-RFM1 = RFM1[RFM1['Frecuencia'] > 0]
-RFM1.reset_index(drop=True,inplace=True)
-RFM1 = RFM1[RFM1['ScoreTotal'] > 0]
-RFM1.reset_index(drop=True,inplace=True)
+pipeline.fit(X_train, y_train)
 
-Data_RFM1 = RFM1[['Egreso más reciente','Frecuencia','ScoreTotal']]
+# === 6. Evaluación ===
+y_pred = pipeline.predict(X_test)
 
-data_log = np.log(Data_RFM1)
-scaler = StandardScaler()
-scaler.fit(data_log)
-data_sc = scaler.transform(data_log)
-df_norm = pd.DataFrame(data_sc, columns=Data_RFM1.columns)
+print("MAE:", mean_absolute_error(y_test, y_pred))
+print("R2:", r2_score(y_test, y_pred))
 
+# === 7. Extraer importancias del Random Forest ===
+# NOTA: Debemos obtener los nombres de las columnas luego del OneHotEncoder
+encoder = pipeline.named_steps["preprocessor"].named_transformers_["cat"]
+encoded_cols = encoder.get_feature_names_out(categorical_columns)
 
-#plots 
-def plots_model():    
-    fig = plt.figure(figsize=(10, 7))
-    ax = fig.add_subplot(111, projection='3d')
-    
-    for x in RFM1.grupos.unique():        
-        xs = RFM1[RFM1.grupos == x]['Egreso más reciente']
-        zs = RFM1[RFM1.grupos == x]['Frecuencia']
-        ys = RFM1[RFM1.grupos == x]['ScoreTotal']
-        ax.scatter(xs, ys, zs, s=50, alpha=0.6, edgecolors='w', label = x)
+# Columnas numéricas (las que no son categóricas)
+numeric_cols = [col for col in X.columns if col not in categorical_columns]
 
-    plt.legend()
-    plt.title('Clusters del Modelo KMeans')
-    plt.savefig('clusters_plot.png')  # Guardar el gráfico como un archivo PNG
+# Combinar nombres finales
+feature_names = list(encoded_cols) + numeric_cols
 
+importances = pipeline.named_steps["model"].feature_importances_
 
-model = KMeans(n_clusters=4, init='k-means++', max_iter=301)
-grupos = model.fit_predict(df_norm)
-df_norm['grupos'] = grupos
-RFM1['grupos'] = grupos
-plots_model()
+# Ordenar por importancia
+indices = np.argsort(importances)[::-1]
+
+# === 8. Graficar ===
+plt.figure(figsize=(12, 6))
+plt.title("Importancia de Características - Random Forest")
+plt.bar(range(len(importances)), importances[indices], align="center")
+plt.xticks(range(len(importances)), [feature_names[i] for i in indices], rotation=90)
+plt.tight_layout()
 plt.show()
+
+# === 9. Guardar modelo ===
+joblib.dump(pipeline, "random_forest_model.pkl")
+print("Modelo guardado como random_forest_model.pkl")
