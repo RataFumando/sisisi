@@ -39,4 +39,8 @@ jobs:
         with:
           name: random_forest_model
           path: random_forest_model.pkl
-
+      - name: Upload plot
+        uses: actions/upload-artifact@v4
+        with:
+          name: training_plot
+          path: random_forest_plot.png
