@@ -79,8 +79,9 @@ plt.title("Importancia de Características - Random Forest")
 plt.bar(range(len(importances)), importances[indices], align="center")
 plt.xticks(range(len(importances)), [feature_names[i] for i in indices], rotation=90)
 plt.tight_layout()
-plt.show()
 
-# === 9. Guardar modelo ===
-joblib.dump(pipeline, "random_forest_model.pkl")
-print("Modelo guardado como random_forest_model.pkl")
+# Guardar la gráfica como PNG
+plt.savefig('random_forest_plot.png')
+
+# Mostrar la gráfica
+plt.show()
