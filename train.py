@@ -12,7 +12,6 @@ import joblib
 # === 1. Cargar datos ===
 df = pd.read_csv("data.csv")
 
-# Eliminar filas con valores faltantes
 df.dropna(inplace=True)
 
 # === 2. Separar características y etiqueta ===
